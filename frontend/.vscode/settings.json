@@ -1,0 +1,7 @@
+{
+  "search.exclude": {
+    "**/.yarn": true,
+    ".next": true
+  },
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}

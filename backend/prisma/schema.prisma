@@ -1,0 +1,36 @@
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+generator client {
+    provider = "cargo prisma"
+    output   = "../src/db.rs"
+}
+
+model User {
+    id             String    @id @default(cuid())
+    uid            String    @unique
+    name           String?
+    email          String?   @unique
+    email_verified Boolean?
+    image          String?
+    projects       Project[]
+
+    @@map("users")
+}
+
+model Project {
+    id          String   @id @default(cuid())
+    slug        String   @unique
+    name        String
+    users       User[]
+    created_at  DateTime @default(now())
+    modified_at DateTime @default(now())
+    // stripe_customer_id        String?   @unique
+    // stripe_subscription_id    String?   @unique
+    // stripe_price_id           String?
+    // stripe_current_period_end DateTime?
+
+    @@map("projects")
+}
