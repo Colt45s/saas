@@ -1,9 +1,10 @@
 import NextAuth from "next-auth/next";
 import { AuthOptions, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { getClient } from "@/graphql-client/server";
+import { getClient } from "@/graphql-client/client";
 import { graphql } from "@/gql";
 import invariant from "tiny-invariant";
+import { logger } from "@/libs/logging/logger";
 
 const SigninMutation = graphql(/* GraphQL */ `
   mutation Signin($token: String!) {
@@ -68,7 +69,15 @@ export const authOptions: AuthOptions = {
     strategy: "jwt",
   },
   logger: {
-    // TODO
+    debug: (code: string, ...message) => {
+      logger.debug(code, ...message);
+    },
+    error: (code: string, ...message) => {
+      logger.error(code, ...message);
+    },
+    warn: (code: string, ...message) => {
+      logger.warn(code, ...message);
+    },
   },
   pages: {
     signIn: "/auth/signin",

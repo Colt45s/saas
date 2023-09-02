@@ -1,4 +1,5 @@
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/(auth)/api/auth/[...nextauth]/route";
+import { logger } from "@/libs/logging/logger";
 import { authExchange } from "@urql/exchange-auth";
 import { getServerSession } from "next-auth";
 import { getSession } from "next-auth/react";
@@ -10,17 +11,20 @@ export const auth = authExchange(async (utilities) => {
     ? await getServerSession(authOptions)
     : await getSession();
   const token = session?.user.accessToken;
+  logger.info(
+    {
+      token,
+    },
+    "[authExchange] access token"
+  );
   return {
     didAuthError: () => {
-      // TODO
       return false;
     },
     willAuthError: () => {
-      // TODO
       return false;
     },
     refreshAuth: async () => {
-      // TODO
       return;
     },
     addAuthToOperation: (operation) => {

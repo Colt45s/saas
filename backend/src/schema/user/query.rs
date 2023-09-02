@@ -28,7 +28,7 @@ impl UserQuery {
         let db = ctx.data::<Database>()?;
 
         let where_param = match by {
-            UserBy::Id(id) => user::id::equals(id.0.into()),
+            UserBy::Id(id) => user::id::equals(id.0),
             UserBy::Email(email) => user::email::equals(email),
         };
 

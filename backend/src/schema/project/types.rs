@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use crate::db::project;
 
 #[derive(SimpleObject)]
-pub struct Product {
+pub struct Project {
     pub id: String,
     pub slug: String,
     pub name: String,
@@ -12,7 +12,7 @@ pub struct Product {
     pub modified_at: DateTime<Utc>,
 }
 
-impl From<project::Data> for Product {
+impl From<project::Data> for Project {
     fn from(project: project::Data) -> Self {
         Self {
             id: project.id,

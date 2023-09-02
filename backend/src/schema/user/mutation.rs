@@ -68,11 +68,11 @@ impl UserMutation {
         Ok(db
             .user()
             .update(
-                user::id::equals(input.id.0.into()),
+                user::id::equals(input.id.0),
                 vec![
                     SetParam::SetName(input.name),
                     SetParam::SetEmail(input.email),
-                    SetParam::SetEmailVerified(input.email_verified.map(|v| v.into())),
+                    SetParam::SetEmailVerified(input.email_verified),
                     SetParam::SetImage(input.image),
                 ],
             )
@@ -86,7 +86,7 @@ impl UserMutation {
 
         Ok(db
             .user()
-            .delete(user::id::equals(user_id.0.into()))
+            .delete(user::id::equals(user_id.0))
             .exec()
             .await?
             .into())

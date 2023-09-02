@@ -108,10 +108,10 @@ where
             return Ok(Self(None));
         };
 
-        let Some(db) = req.extensions.get::<Arc<db::PrismaClient>>() else {
-            tracing::info!("db not found");
-            return Ok(Self(None));
-        };
+        let db = req
+            .extensions
+            .get::<Arc<db::PrismaClient>>()
+            .ok_or(AppError::InternalServerError.into_response())?;
 
         tracing::info!("token: {}", token);
         let Ok(claims) = verify(firebase_config, &token).await else {
@@ -135,6 +135,9 @@ type AppResult<T> = Result<T, AppError>;
 enum AppError {
     PrismaError(QueryError),
     NotFound,
+    InternalServerError,
+    BadRequest,
+    Forbidden,
 }
 
 impl From<QueryError> for AppError {
@@ -155,6 +158,9 @@ impl IntoResponse for AppError {
             }
             AppError::PrismaError(_) => StatusCode::BAD_REQUEST,
             AppError::NotFound => StatusCode::NOT_FOUND,
+            AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::BadRequest => StatusCode::BAD_REQUEST,
+            AppError::Forbidden => StatusCode::FORBIDDEN,
         };
 
         status.into_response()
