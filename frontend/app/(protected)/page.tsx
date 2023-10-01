@@ -69,7 +69,7 @@ const Page = () => {
       <h1>hello {viewer.name}</h1>
       <div>
         {viewer.projects.edges.map(({ node }) => (
-          <div>
+          <div key={node.id}>
             <Link href={`/p/${node.slug}`}>{node.name}</Link>
           </div>
         ))}
