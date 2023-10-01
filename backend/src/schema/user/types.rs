@@ -1,8 +1,16 @@
+use std::sync::Arc;
+
+use anyhow::anyhow;
 use async_graphql::connection::{query, Connection, Edge};
 use async_graphql::{ComplexObject, Context, Result, SimpleObject, ID};
+use shaku::HasProvider;
 
 use crate::db::user;
-use crate::{schema::project::types::Project, Database};
+use crate::schema::project::types::Project;
+use crate::services::user::UserService;
+use crate::services::Injector;
+
+use super::query::UserBy;
 
 #[derive(SimpleObject)]
 #[graphql(complex)]
@@ -25,15 +33,14 @@ impl User {
         first: Option<i32>,
         last: Option<i32>,
     ) -> Result<Connection<usize, Project>> {
-        let db = ctx.data::<Database>()?;
-        let user_id = &self.id;
-        let user = db
-            .user()
-            .find_unique(user::id::equals(user_id.clone().0))
-            .with(user::projects::fetch(vec![]))
-            .exec()
+        let injector = ctx.data::<Arc<Injector>>()?;
+        let user_service: Box<dyn UserService> =
+            injector.provide().map_err(|e| anyhow!(e.to_string()))?;
+
+        let user = user_service
+            .get_user(UserBy::Id(self.id.clone()))
             .await?
-            .ok_or("User not found")?;
+            .ok_or(anyhow!("User not found"))?;
 
         let projects = user.projects()?;
 

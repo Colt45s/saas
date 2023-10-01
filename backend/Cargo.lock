@@ -78,6 +78,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b13c32d80ecc7ab747b80c3784bce54ee8a7a0cc4fbda9bf4cda2cf6fe90854"
 
 [[package]]
+name = "anymap"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33954243bd79057c2de7338850b85983a44588021f8a5fee574a8888c6de4344"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -349,6 +355,8 @@ dependencies = [
  "prisma-client-rust",
  "reqwest",
  "serde",
+ "shaku",
+ "shaku_axum",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -4236,6 +4244,38 @@ checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest 0.10.7",
  "keccak",
+]
+
+[[package]]
+name = "shaku"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "334da76925a094e2c72802ce17433cba4b5d8661d66ef36e1f899efab17192a5"
+dependencies = [
+ "anymap",
+ "once_cell",
+ "shaku_derive",
+]
+
+[[package]]
+name = "shaku_axum"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "816e4f48d688dcb6e5c4270d8838a0431303b66931613270485959e4d5b45a01"
+dependencies = [
+ "axum",
+ "shaku",
+]
+
+[[package]]
+name = "shaku_derive"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "524f791f1f958b9c1825c1e48657d3bc485ee9ac4a1c7c226ab7fc7010afa7dc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

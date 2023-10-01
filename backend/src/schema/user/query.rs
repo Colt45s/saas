@@ -1,7 +1,15 @@
+use std::sync::Arc;
+
+use anyhow::anyhow;
 use async_graphql::{Context, Object, OneofObject, Result, ID};
+use shaku::HasProvider;
 
 use super::types::User;
-use crate::{db::user, schema::guard::AuthenticationGuard, AuthenticatedUser, Database};
+use crate::{
+    schema::guard::AuthenticationGuard,
+    services::{user::UserService, Injector},
+    AuthenticatedUser,
+};
 
 #[derive(Default)]
 pub struct UserQuery;
@@ -25,20 +33,15 @@ impl UserQuery {
     }
 
     async fn user(&self, ctx: &Context<'_>, by: UserBy) -> Result<User> {
-        let db = ctx.data::<Database>()?;
+        let injector = ctx.data::<Arc<Injector>>()?;
+        let user_service: Box<dyn UserService> =
+            injector.provide().map_err(|e| anyhow!(e.to_string()))?;
 
-        let where_param = match by {
-            UserBy::Id(id) => user::id::equals(id.0),
-            UserBy::Email(email) => user::email::equals(email),
-        };
-
-        Ok(db
-            .user()
-            .find_unique(where_param)
-            .exec()
-            .await?
-            .ok_or("user not found")?
-            .into())
+        match user_service.get_user(by).await {
+            Ok(Some(user)) => Ok(user.into()),
+            Ok(None) => Err(anyhow!("User not found").into()),
+            Err(e) => Err(e.into()),
+        }
     }
 
     // #[graphql(guard = "RoleGuard::new(Role::Admin)")]

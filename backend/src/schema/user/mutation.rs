@@ -1,10 +1,13 @@
+use std::sync::Arc;
+
+use anyhow::anyhow;
 use async_graphql::{Context, InputObject, Object, Result, ID};
+use shaku::HasProvider;
 
 use super::types::User;
 use crate::{
-    db::user::{self, SetParam},
-    firebase::{self, FirebaseConfig},
-    Database,
+    firebase_auth::FirebaseAuth,
+    services::{user::UserService, Injector},
 };
 
 #[derive(Default)]
@@ -12,89 +15,60 @@ pub struct UserMutation {}
 
 #[Object]
 impl UserMutation {
-    async fn signin(&self, ctx: &Context<'_>, token: String) -> Result<User> {
-        let db = ctx.data::<Database>()?;
-        let firebase_config = ctx.data::<FirebaseConfig>()?;
-        let claims: firebase::auth::Claims =
-            firebase::auth::verify(firebase_config, &token).await?;
+    async fn signin(
+        &self,
+        ctx: &Context<'_>,
+        token: String,
+        refresh_token: Option<String>,
+    ) -> Result<User> {
+        let firebase_auth = ctx.data::<FirebaseAuth>()?;
+        let claims = firebase_auth.verify(&token).await?;
         tracing::info!("claims: {:?}", claims);
-        let user = db
-            .user()
-            .find_unique(user::uid::equals(claims.sub.clone()))
-            .exec()
-            .await?;
 
-        match user {
-            Some(user) => Ok(user.into()),
-            None => Ok(db
-                .user()
-                .create(
-                    claims.sub.clone(),
-                    vec![
-                        SetParam::SetName(claims.name),
-                        SetParam::SetEmail(claims.email),
-                        SetParam::SetEmailVerified(claims.email_verified),
-                        SetParam::SetImage(claims.picture),
-                    ],
-                )
-                .exec()
+        let injector = ctx.data::<Arc<Injector>>()?;
+        let user_service: Box<dyn UserService> =
+            injector.provide().map_err(|e| anyhow!(e.to_string()))?;
+
+        match user_service.get_user_by_uid(claims.sub.clone()).await {
+            Ok(Some(user)) => Ok(user.into()),
+            Ok(None) => Ok(user_service
+                .create_user(CreateUserInput {
+                    uid: claims.sub.clone(),
+                    name: claims.name,
+                    email: claims.email,
+                    email_verified: claims.email_verified,
+                    image: claims.picture,
+                })
                 .await?
                 .into()),
+            Err(e) => Err(e.into()),
         }
     }
 
     async fn create_user(&self, ctx: &Context<'_>, input: CreateUserInput) -> Result<User> {
-        let db = ctx.data::<Database>()?;
-
-        Ok(db
-            .user()
-            .create(
-                input.uid,
-                vec![
-                    SetParam::SetName(input.name),
-                    SetParam::SetEmail(input.email),
-                    SetParam::SetEmailVerified(input.email_verified),
-                    SetParam::SetImage(input.image),
-                ],
-            )
-            .exec()
-            .await?
-            .into())
+        let injector = ctx.data::<Arc<Injector>>()?;
+        let user_service: Box<dyn UserService> =
+            injector.provide().map_err(|e| anyhow!(e.to_string()))?;
+        Ok(user_service.create_user(input).await?.into())
     }
 
     async fn update_user(&self, ctx: &Context<'_>, input: UpdateUserInput) -> Result<User> {
-        let db = ctx.data::<Database>()?;
-
-        Ok(db
-            .user()
-            .update(
-                user::id::equals(input.id.0),
-                vec![
-                    SetParam::SetName(input.name),
-                    SetParam::SetEmail(input.email),
-                    SetParam::SetEmailVerified(input.email_verified),
-                    SetParam::SetImage(input.image),
-                ],
-            )
-            .exec()
-            .await?
-            .into())
+        let injector = ctx.data::<Arc<Injector>>()?;
+        let user_service: Box<dyn UserService> =
+            injector.provide().map_err(|e| anyhow!(e.to_string()))?;
+        Ok(user_service.update_user(input).await?.into())
     }
 
     async fn delete_user(&self, ctx: &Context<'_>, user_id: ID) -> Result<User> {
-        let db = ctx.data::<Database>()?;
-
-        Ok(db
-            .user()
-            .delete(user::id::equals(user_id.0))
-            .exec()
-            .await?
-            .into())
+        let injector = ctx.data::<Arc<Injector>>()?;
+        let user_service: Box<dyn UserService> =
+            injector.provide().map_err(|e| anyhow!(e.to_string()))?;
+        Ok(user_service.delete_user(user_id).await?.into())
     }
 }
 
 #[derive(InputObject)]
-struct CreateUserInput {
+pub struct CreateUserInput {
     pub uid: String,
     pub name: Option<String>,
     pub email: Option<String>,
@@ -103,7 +77,7 @@ struct CreateUserInput {
 }
 
 #[derive(InputObject)]
-struct UpdateUserInput {
+pub struct UpdateUserInput {
     pub id: ID,
     pub name: Option<String>,
     pub email: Option<String>,

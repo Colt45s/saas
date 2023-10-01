@@ -1,31 +1,41 @@
 #[allow(warnings, unused)]
 mod db;
-pub mod firebase;
+pub mod firebase_auth;
+mod prisma;
 mod schema;
-
-use std::net::Ipv4Addr;
-use std::net::SocketAddr;
-use std::sync::Arc;
+mod services;
 
 use anyhow::Result;
-use async_graphql::http::GraphiQLSource;
-use async_graphql::{extensions, EmptySubscription, Schema};
+use async_graphql::{extensions, http::GraphiQLSource, EmptySubscription, Schema};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use async_trait::async_trait;
-use axum::extract::FromRequestParts;
-use axum::http::request::Parts;
-use axum::http::StatusCode;
-use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{get, post};
-use axum::{Extension, Router, Server};
+use axum::{
+    extract::{FromRef, FromRequestParts, State},
+    http::{request::Parts, StatusCode},
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
+    Extension, Router, Server,
+};
 use axum_auth::AuthBearer;
 use dotenv::dotenv;
-use prisma_client_rust::prisma_errors::query_engine::{RecordNotFound, UniqueKeyViolation};
-use prisma_client_rust::QueryError;
+use prisma_client_rust::{
+    prisma_errors::query_engine::{RecordNotFound, UniqueKeyViolation},
+    QueryError,
+};
 use schema::{MutationRoot, QueryRoot};
+use shaku::HasProvider;
 use std::env;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 
-use crate::firebase::FirebaseConfig;
+use crate::firebase_auth::FirebaseAuth;
+use crate::services::{user::UserService, Injector};
+
+#[derive(Clone)]
+pub struct AppState {
+    pub module: Arc<Injector>,
+    pub schema: schema::Schema,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -35,9 +45,7 @@ async fn main() -> Result<()> {
 
     dotenv()?;
 
-    let firebase_config = FirebaseConfig::new(env::var("FIREBASE_PROJECT_ID")?);
-
-    let db = Arc::new(db::new_client().await?);
+    let firebase_auth = FirebaseAuth::new(env::var("FIREBASE_PROJECT_ID")?);
 
     tracing::info!("Connected to database");
 
@@ -50,15 +58,22 @@ async fn main() -> Result<()> {
     .extension(extensions::Tracing)
     .finish();
 
-    // sdl
     tracing::info!("{}", schema.sdl());
+
+    let state = Arc::new(AppState {
+        module: Arc::new(
+            Injector::create()
+                .await
+                .expect("Failed to create the dependency injector"),
+        ),
+        schema,
+    });
 
     let app = Router::new()
         .route("/graphiql", get(graphiql_handler))
         .route("/graphql", post(graphql_handler))
-        .layer(Extension(firebase_config))
-        .layer(Extension(db))
-        .layer(Extension(schema));
+        .layer(Extension(firebase_auth))
+        .with_state(state);
 
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 4001));
 
@@ -75,17 +90,17 @@ async fn graphiql_handler() -> impl IntoResponse {
 pub type Database = Arc<db::PrismaClient>;
 
 async fn graphql_handler(
+    State(state): State<Arc<AppState>>,
     user: AuthenticatedUser,
-    Extension(schema): Extension<schema::Schema>,
-    Extension(db): Extension<Arc<db::PrismaClient>>,
-    Extension(firebase_config): Extension<FirebaseConfig>,
+    Extension(firebase_auth): Extension<FirebaseAuth>,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
+    let state = Arc::from_ref(&state);
     let mut request = req.into_inner();
+    request = request.data(firebase_auth);
     request = request.data(user);
-    request = request.data(db);
-    request = request.data(firebase_config);
-    schema.execute(request).await.into()
+    request = request.data(state.module.clone());
+    state.schema.execute(request).await.into()
 }
 
 pub struct AuthenticatedUser(Option<db::user::Data>);
@@ -93,40 +108,38 @@ pub struct AuthenticatedUser(Option<db::user::Data>);
 #[async_trait]
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
+    Arc<AppState>: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = Response;
     async fn from_request_parts(req: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        use firebase::auth::verify;
         let Ok(AuthBearer(token)) = AuthBearer::from_request_parts(req, state).await else {
             tracing::info!("AuthBearer not found");
             return Ok(Self(None));
         };
 
-        let Some(firebase_config) = req.extensions.get::<FirebaseConfig>() else {
-            tracing::info!("firebase_config not found");
+        let Some(firebase_auth) = req.extensions.get::<FirebaseAuth>() else {
+            tracing::info!("firebase_auth not found");
             return Ok(Self(None));
         };
 
-        let db = req
-            .extensions
-            .get::<Arc<db::PrismaClient>>()
-            .ok_or(AppError::InternalServerError.into_response())?;
-
         tracing::info!("token: {}", token);
-        let Ok(claims) = verify(firebase_config, &token).await else {
+        let Ok(claims) = firebase_auth.verify(&token).await else {
             tracing::info!("verify failed");
             return Ok(Self(None));
         };
 
-        tracing::info!("uid: {}", claims.sub.clone());
-        Ok(Self(
-            db.user()
-                .find_unique(db::user::uid::equals(claims.sub.clone()))
-                .exec()
-                .await
-                .map_err(|e| AppError::from(e).into_response())?,
-        ))
+        let state = Arc::from_ref(state);
+        let module: Box<dyn UserService> = state
+            .module
+            .provide()
+            .map_err(|_| AppError::InternalServerError.into_response())?;
+
+        match module.get_user_by_uid(claims.sub.clone()).await {
+            Ok(Some(user)) => Ok(AuthenticatedUser(Some(user))),
+            Ok(None) => Ok(AuthenticatedUser(None)),
+            Err(_) => Ok(AuthenticatedUser(None)),
+        }
     }
 }
 

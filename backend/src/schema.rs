@@ -1,6 +1,6 @@
 mod guard;
 mod project;
-mod user;
+pub mod user;
 
 use async_graphql::EmptySubscription;
 use async_graphql::MergedObject;
