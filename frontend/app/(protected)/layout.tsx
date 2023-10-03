@@ -1,6 +1,6 @@
 "use client";
 
-import UrqlProvider from "../urql-provider";
+import UrqlProvider from "@/components/providers/urql-provider";
 
 export default function RootLayout({
   children,
