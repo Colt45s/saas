@@ -50,34 +50,18 @@ impl User {
             first,
             last,
             |after, before, first, last| async move {
-                let mut start = 0usize;
-                let mut end = projects.len();
-
-                if let Some(after) = after {
-                    if after >= projects.len() {
-                        return Ok(Connection::new(false, false));
-                    }
-                    start = after + 1;
-                }
-
-                if let Some(before) = before {
-                    if before == 0 {
-                        return Ok(Connection::new(false, false));
-                    }
-
-                    end = before;
-                }
-
-                let mut slice = projects[start..end].to_vec();
+                let mut start = after.map(|after| after + 1).unwrap_or(0);
+                let mut end = before.unwrap_or(projects.len());
 
                 if let Some(first) = first {
-                    slice = slice[..first.min(slice.len())].to_vec();
-                    end -= first.min(slice.len());
-                } else if let Some(last) = last {
-                    slice = slice[slice.len() - last.min(slice.len())..].to_vec();
-                    start += last.min(slice.len());
+                    end = (start + first).min(end);
                 }
 
+                if let Some(last) = last {
+                    start = if last > end - start { end } else { end - last }
+                }
+
+                let slice = projects[start..end].to_vec();
                 let mut connection = Connection::new(start > 0, end < projects.len());
                 connection.edges.extend(
                     slice
