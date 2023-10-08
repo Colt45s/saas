@@ -14,7 +14,8 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
  */
 const documents = {
     "\n  mutation Signin($token: String!) {\n    signin(token: $token) {\n      id\n      uid\n      name\n      email\n      emailVerified\n      image\n    }\n  }\n": types.SigninDocument,
-    "\n  query ViewerQuery($first: Int!, $cursor: String) {\n    viewer {\n      id\n      name\n      projects(first: $first, after: $cursor) {\n        edges {\n          node {\n            id\n            name\n            slug\n          }\n        }\n        pageInfo {\n          hasNextPage\n          endCursor\n        }\n      }\n    }\n  }\n": types.ViewerQueryDocument,
+    "\n  query ProjectsQuery(\n    $first: Int\n    $last: Int\n    $before: String\n    $after: String\n  ) {\n    viewer {\n      projects(first: $first, last: $last, before: $before, after: $after) {\n        edges {\n          node {\n            id\n            name\n            slug\n          }\n        }\n        pageInfo {\n          hasPreviousPage\n          hasNextPage\n          startCursor\n          endCursor\n        }\n      }\n    }\n  }\n": types.ProjectsQueryDocument,
+    "\n  query ViewerQuery {\n    viewer {\n      id\n      name\n    }\n  }\n": types.ViewerQueryDocument,
 };
 
 /**
@@ -38,7 +39,11 @@ export function graphql(source: "\n  mutation Signin($token: String!) {\n    sig
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query ViewerQuery($first: Int!, $cursor: String) {\n    viewer {\n      id\n      name\n      projects(first: $first, after: $cursor) {\n        edges {\n          node {\n            id\n            name\n            slug\n          }\n        }\n        pageInfo {\n          hasNextPage\n          endCursor\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query ViewerQuery($first: Int!, $cursor: String) {\n    viewer {\n      id\n      name\n      projects(first: $first, after: $cursor) {\n        edges {\n          node {\n            id\n            name\n            slug\n          }\n        }\n        pageInfo {\n          hasNextPage\n          endCursor\n        }\n      }\n    }\n  }\n"];
+export function graphql(source: "\n  query ProjectsQuery(\n    $first: Int\n    $last: Int\n    $before: String\n    $after: String\n  ) {\n    viewer {\n      projects(first: $first, last: $last, before: $before, after: $after) {\n        edges {\n          node {\n            id\n            name\n            slug\n          }\n        }\n        pageInfo {\n          hasPreviousPage\n          hasNextPage\n          startCursor\n          endCursor\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query ProjectsQuery(\n    $first: Int\n    $last: Int\n    $before: String\n    $after: String\n  ) {\n    viewer {\n      projects(first: $first, last: $last, before: $before, after: $after) {\n        edges {\n          node {\n            id\n            name\n            slug\n          }\n        }\n        pageInfo {\n          hasPreviousPage\n          hasNextPage\n          startCursor\n          endCursor\n        }\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ViewerQuery {\n    viewer {\n      id\n      name\n    }\n  }\n"): (typeof documents)["\n  query ViewerQuery {\n    viewer {\n      id\n      name\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

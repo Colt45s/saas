@@ -4,8 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { graphql } from "@/gql";
 import invariant from "tiny-invariant";
 import { logger } from "@/libs/logging/logger";
-import request from "graphql-request";
-import { backendUrl } from "@/utils/endpoint";
+import { execute } from "@/graphql/client";
 
 const SigninMutation = graphql(/* GraphQL */ `
   mutation Signin($token: String!) {
@@ -28,8 +27,12 @@ export const authOptions: AuthOptions = {
       credentials: {},
       async authorize(credentials: any) {
         const { idToken, refreshToken } = credentials;
-        const data = await request(`${backendUrl}/graphql`, SigninMutation, {
-          token: idToken,
+
+        const data = await execute({
+          query: SigninMutation,
+          variables: {
+            token: idToken,
+          },
         });
 
         invariant(data?.signin, "signin failed");

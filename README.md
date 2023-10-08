@@ -38,11 +38,11 @@ $ cargo watch -x run
 ### setup
 
 ```
-$ yarn
+$ pnpm i
 ```
 
 ### run
 
 ```
-$ yarn dev
+$ pnpm dev
 ```

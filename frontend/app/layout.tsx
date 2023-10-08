@@ -1,4 +1,4 @@
-import SessionProvider from "@/components/providers/session-provider";
+import "@/css/globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
@@ -9,16 +9,14 @@ export const metadata: Metadata = {
   description: "A SaaS Demo",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <SessionProvider>{children}</SessionProvider>
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }

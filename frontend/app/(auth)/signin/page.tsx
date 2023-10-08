@@ -1,5 +1,6 @@
 "use client";
 
+import SessionProvider from "@/components/providers/session-provider";
 import { firebaseAuth } from "@/libs/firebase/client";
 import type { AuthProvider } from "firebase/auth";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
@@ -13,7 +14,7 @@ const Page = () => {
     const token = await credential.user.getIdToken(true);
     const refreshToken = credential.user.refreshToken;
 
-    signIn("credentials", {
+    await signIn("credentials", {
       idToken: token,
       refreshToken,
       callbackUrl: "/",
@@ -21,10 +22,14 @@ const Page = () => {
   };
 
   return (
-    <main>
-      <h1>Signin Page</h1>
-      <button onClick={() => handleOAuthSignIn(googleProvider)}>Google</button>
-    </main>
+    <SessionProvider>
+      <main>
+        <h1>Signin Page</h1>
+        <button onClick={() => handleOAuthSignIn(googleProvider)}>
+          Google
+        </button>
+      </main>
+    </SessionProvider>
   );
 };
 
