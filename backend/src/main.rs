@@ -1,40 +1,40 @@
 #[allow(warnings, unused)]
 mod db;
+mod error;
 pub mod firebase_auth;
+mod handlers;
 mod prisma;
 mod schema;
 mod services;
 
 use anyhow::Result;
-use async_graphql::{extensions, http::GraphiQLSource, EmptySubscription, Schema};
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use async_graphql::{extensions, EmptySubscription, Schema};
 use async_trait::async_trait;
 use axum::{
-    extract::{FromRef, FromRequestParts, State},
-    http::{request::Parts, StatusCode},
-    response::{Html, IntoResponse, Response},
+    extract::{FromRef, FromRequestParts},
+    http::request::Parts,
+    response::{IntoResponse, Response},
     routing::{get, post},
-    Extension, Router, Server,
+    Router, Server,
 };
 use axum_auth::AuthBearer;
 use dotenv::dotenv;
-use prisma_client_rust::{
-    prisma_errors::query_engine::{RecordNotFound, UniqueKeyViolation},
-    QueryError,
-};
 use schema::{MutationRoot, QueryRoot};
 use shaku::HasProvider;
 use std::env;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
+use crate::error::AppError;
 use crate::firebase_auth::FirebaseAuth;
+use crate::handlers::{graphiql_handler::graphiql_handler, graphql_handler::graphql_handler};
 use crate::services::{user::UserService, Injector};
 
 #[derive(Clone)]
 pub struct AppState {
     pub module: Arc<Injector>,
     pub schema: schema::Schema,
+    pub firebase_auth: FirebaseAuth,
 }
 
 #[tokio::main]
@@ -49,6 +49,12 @@ async fn main() -> Result<()> {
 
     tracing::info!("Connected to database");
 
+    let module = Arc::new(
+        Injector::create()
+            .await
+            .expect("Failed to create the dependency injector"),
+    );
+
     let schema = Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
@@ -56,23 +62,21 @@ async fn main() -> Result<()> {
     )
     .extension(extensions::Logger)
     .extension(extensions::Tracing)
+    .data(module.to_owned())
+    .data(firebase_auth.to_owned())
     .finish();
 
     tracing::info!("{}", schema.sdl());
 
     let state = Arc::new(AppState {
-        module: Arc::new(
-            Injector::create()
-                .await
-                .expect("Failed to create the dependency injector"),
-        ),
+        module,
         schema,
+        firebase_auth,
     });
 
     let app = Router::new()
         .route("/graphiql", get(graphiql_handler))
         .route("/graphql", post(graphql_handler))
-        .layer(Extension(firebase_auth))
         .with_state(state);
 
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 4001));
@@ -83,26 +87,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn graphiql_handler() -> impl IntoResponse {
-    Html(GraphiQLSource::build().endpoint("/graphql").finish())
-}
-
 pub type Database = Arc<db::PrismaClient>;
-
-async fn graphql_handler(
-    State(state): State<Arc<AppState>>,
-    user: AuthenticatedUser,
-    Extension(firebase_auth): Extension<FirebaseAuth>,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
-    let state = Arc::from_ref(&state);
-    let mut request = req.into_inner();
-    request = request.data(firebase_auth);
-    request = request.data(user);
-    request = request.data(state.module.clone());
-    state.schema.execute(request).await.into()
-}
-
 pub struct AuthenticatedUser(Option<db::user::Data>);
 
 #[async_trait]
@@ -117,19 +102,15 @@ where
             tracing::info!("AuthBearer not found");
             return Ok(Self(None));
         };
+        let state = Arc::from_ref(state);
 
-        let Some(firebase_auth) = req.extensions.get::<FirebaseAuth>() else {
-            tracing::info!("firebase_auth not found");
-            return Ok(Self(None));
-        };
-
+        let firebase_auth = state.firebase_auth.to_owned();
         tracing::info!("token: {}", token);
         let Ok(claims) = firebase_auth.verify(&token).await else {
             tracing::info!("verify failed");
             return Ok(Self(None));
         };
 
-        let state = Arc::from_ref(state);
         let module: Box<dyn UserService> = state
             .module
             .provide()
@@ -144,38 +125,3 @@ where
 }
 
 type AppResult<T> = Result<T, AppError>;
-
-enum AppError {
-    PrismaError(QueryError),
-    NotFound,
-    InternalServerError,
-    BadRequest,
-    Forbidden,
-}
-
-impl From<QueryError> for AppError {
-    fn from(error: QueryError) -> Self {
-        match error {
-            e if e.is_prisma_error::<RecordNotFound>() => AppError::NotFound,
-            e => AppError::PrismaError(e),
-        }
-    }
-}
-
-// Error to response mapping
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let status = match self {
-            AppError::PrismaError(error) if error.is_prisma_error::<UniqueKeyViolation>() => {
-                StatusCode::CONFLICT
-            }
-            AppError::PrismaError(_) => StatusCode::BAD_REQUEST,
-            AppError::NotFound => StatusCode::NOT_FOUND,
-            AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
-            AppError::BadRequest => StatusCode::BAD_REQUEST,
-            AppError::Forbidden => StatusCode::FORBIDDEN,
-        };
-
-        status.into_response()
-    }
-}

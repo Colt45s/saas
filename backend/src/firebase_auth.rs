@@ -1,7 +1,6 @@
+use anyhow::Result;
 use serde::Deserialize;
 use std::collections::HashMap;
-
-use anyhow::Result;
 
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 
